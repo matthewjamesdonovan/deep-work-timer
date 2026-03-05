@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep Work Timer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Cormorant:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0d;
+    --surface: #161614;
+    --card: #1e1e1b;
+    --border: #2c2c28;
+    --accent: #c9b99a;
+    --accent2: #8fa89a;
+    --accent3: #a89a8f;
+    --text: #e8e4dc;
+    --muted: #6b6760;
+    --danger: #b89080;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 48px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(201,185,154,0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, rgba(143,168,154,0.03) 0%, transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .app { width: 100%; max-width: 420px; position: relative; z-index: 1; }
+
+  /* HEADER */
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+  .logo { font-family: 'Cormorant', serif; font-size: 18px; font-weight: 600; font-style: italic; letter-spacing: 0.04em; color: var(--text); }
+  .level-badge {
+    background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+    padding: 6px 14px; font-family: 'DM Mono', monospace; font-size: 11px;
+    color: var(--accent); display: flex; align-items: center; gap: 6px;
+  }
+
+  /* XP BAR */
+  .xp-bar-wrap {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; gap: 14px;
+  }
+  .xp-info { flex: 1; }
+  .xp-label { font-size: 11px; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
+  .xp-bar-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .xp-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 3px; transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+  .xp-count { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent); white-space: nowrap; }
+
+  /* STATS */
+  .streak-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .stat-pill { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; text-align: center; }
+  .stat-pill .val { font-family: 'Cormorant', serif; font-size: 32px; font-weight: 600; line-height: 1; margin-bottom: 4px; }
+  .stat-pill .lbl { font-size: 10px; letter-spacing: 0.04em; color: var(--muted); }
+  .stat-pill.streak .val { color: var(--accent); }
+  .stat-pill.hours .val { color: var(--accent2); }
+  .stat-pill.total .val { color: var(--accent3); }
+
+  /* DEPTH HOURS BAR */
+  .depth-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px 18px; margin-bottom: 20px;
+  }
+  .depth-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .depth-title { font-size: 11px; letter-spacing: 0.04em; color: var(--muted); }
+  .depth-count { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent2); }
+  .depth-track { height: 10px; background: var(--border); border-radius: 5px; overflow: hidden; position: relative; }
+  .depth-fill { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); border-radius: 5px; transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+  .depth-cap-line {
+    position: absolute; top: -2px; bottom: -2px; width: 2px;
+    background: var(--accent3); border-radius: 1px;
+    left: 100%; /* will be set by JS */
+  }
+  .depth-note { font-size: 11px; color: var(--muted); margin-top: 8px; font-style: italic; line-height: 1.5; }
+
+  /* TIMER */
+  .timer-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+    padding: 28px 24px 24px; text-align: center; margin-bottom: 20px;
+    position: relative; overflow: hidden;
+  }
+  .timer-card::after {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(201,185,154,0.04) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .mode-tabs {
+    display: flex; background: var(--surface); border-radius: 10px;
+    padding: 4px; margin-bottom: 28px; gap: 4px;
+  }
+  .mode-tab {
+    flex: 1; padding: 8px; border: none; border-radius: 7px; background: transparent;
+    color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 500;
+    letter-spacing: 0.02em; cursor: pointer; transition: all 0.2s;
+  }
+  .mode-tab.active { background: var(--card); color: var(--text); }
+
+  .timer-ring-wrap { position: relative; width: 190px; height: 190px; margin: 0 auto 24px; }
+  .timer-ring-svg { transform: rotate(-90deg); width: 190px; height: 190px; }
+  .ring-bg { fill: none; stroke: var(--border); stroke-width: 6; }
+  .ring-progress { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 0.3s; }
+  .timer-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .timer-display { font-family: 'Cormorant', serif; font-size: 56px; font-weight: 600; letter-spacing: -1px; line-height: 1; }
+  .timer-phase { font-size: 11px; letter-spacing: 0.08em; color: var(--muted); font-style: italic; }
+
+  .timer-controls { display: flex; gap: 12px; justify-content: center; align-items: center; }
+  .btn-main {
+    background: var(--accent); color: var(--bg); border: none; border-radius: 14px;
+    padding: 15px 36px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+    letter-spacing: 0.08em; cursor: pointer; transition: all 0.15s;
+  }
+  .btn-main:active { transform: scale(0.97); }
+  .btn-main.break { background: var(--accent2); color: var(--bg); }
+  .btn-main.paused { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .btn-icon {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    width: 46px; height: 46px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--muted); font-size: 16px; transition: all 0.15s;
+  }
+  .btn-icon:hover { color: var(--text); border-color: var(--muted); }
+
+  /* DAILY GOAL */
+  .goal-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; margin-bottom: 20px; }
+  .goal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .goal-title { font-size: 11px; letter-spacing: 0.04em; color: var(--muted); }
+  .goal-count { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent3); }
+  .goal-dots { display: flex; gap: 8px; }
+  .goal-dot { flex: 1; height: 8px; border-radius: 4px; background: var(--border); transition: background 0.4s; }
+  .goal-dot.done { background: var(--accent3); }
+  .goal-dot.active { background: var(--accent3); opacity: 0.4; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:0.9} }
+
+  /* CALENDAR CHAIN */
+  .calendar-section { margin-bottom: 20px; }
+  .section-label { font-size: 11px; letter-spacing: 0.04em; color: var(--muted); font-style: italic; margin-bottom: 12px; }
+  .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-day {
+    aspect-ratio: 1; border-radius: 6px; background: var(--card); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 9px;
+    font-family: 'DM Mono', monospace; color: var(--muted); transition: all 0.3s;
+    flex-direction: column; gap: 2px;
+  }
+  .cal-day.has-work { background: rgba(200,240,110,0.12); border-color: rgba(200,240,110,0.3); }
+  .cal-day.has-work .cal-x { color: var(--accent); font-size: 14px; font-weight: 700; }
+  .cal-day.today { border-color: var(--accent2); }
+  .cal-day.future { opacity: 0.3; }
+  .cal-x { font-size: 10px; }
+  .cal-num { font-size: 8px; color: var(--muted); }
+
+  /* DEPTH RATING MODAL */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+  .modal-overlay.show { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+    padding: 32px 24px; width: 100%; max-width: 360px; text-align: center;
+    transform: translateY(20px); transition: transform 0.3s;
+  }
+  .modal-overlay.show .modal { transform: translateY(0); }
+  .modal-title { font-family: 'Cormorant', serif; font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+  .modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 28px; line-height: 1.5; }
+  .depth-stars { display: flex; gap: 12px; justify-content: center; margin-bottom: 28px; }
+  .depth-star-btn {
+    flex: 1; padding: 16px 8px; border: 1px solid var(--border); border-radius: 14px;
+    background: var(--surface); color: var(--text); cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 12px;
+    transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .depth-star-btn:hover, .depth-star-btn.selected { border-color: var(--accent); background: rgba(200,240,110,0.08); color: var(--accent); }
+  .depth-star-btn .star-emoji { font-size: 22px; }
+  .depth-star-btn .star-label { font-size: 10px; letter-spacing: 0.05em; }
+
+  /* SHUTDOWN MODAL */
+  .shutdown-modal { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 32px 24px; width: 100%; max-width: 360px; text-align: center; transform: translateY(20px); transition: transform 0.3s; }
+  .modal-overlay.show .shutdown-modal { transform: translateY(0); }
+  .shutdown-icon { font-size: 40px; margin-bottom: 16px; }
+  .shutdown-title { font-family: 'Cormorant', serif; font-size: 26px; font-weight: 600; margin-bottom: 8px; font-style: italic; }
+  .shutdown-summary { background: var(--surface); border-radius: 12px; padding: 16px; margin: 20px 0; text-align: left; }
+  .shutdown-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .shutdown-row:last-child { border-bottom: none; }
+  .shutdown-row .key { color: var(--muted); }
+  .shutdown-row .val { color: var(--text); font-weight: 700; font-family: 'DM Mono', monospace; font-size: 12px; }
+  .shutdown-phrase { font-size: 13px; color: var(--accent); font-style: italic; margin-bottom: 24px; }
+  .btn-shutdown { width: 100%; padding: 16px; border: none; border-radius: 14px; background: var(--accent3); color: var(--bg); font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; transition: all 0.15s; }
+  .btn-shutdown:active { transform: scale(0.98); }
+
+  /* PRE-SESSION FOCUS PROMPT */
+  .focus-prompt {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px 18px; margin-bottom: 20px; display: none;
+  }
+  .focus-prompt.visible { display: block; }
+  .focus-prompt-title { font-size: 11px; letter-spacing: 0.04em; color: var(--accent); font-style: italic; margin-bottom: 10px; }
+  .focus-checklist { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .focus-checklist li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .focus-checklist li::before { content: '○'; color: var(--border); font-size: 14px; }
+  .focus-checklist li.checked { color: var(--text); }
+  .focus-checklist li.checked::before { content: '●'; color: var(--accent); }
+
+  /* BADGES */
+  .badges-section { margin-bottom: 20px; }
+  .badges-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .badge-item { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 8px; text-align: center; transition: all 0.3s; }
+  .badge-item.unlocked { border-color: rgba(200,240,110,0.3); background: rgba(200,240,110,0.05); }
+  .badge-item.locked { opacity: 0.35; filter: grayscale(1); }
+  .badge-emoji { font-size: 22px; margin-bottom: 6px; display: block; }
+  .badge-name { font-size: 9px; letter-spacing: 0.04em; color: var(--muted); line-height: 1.3; }
+  .badge-item.unlocked .badge-name { color: var(--accent); }
+
+  /* SHUTDOWN BUTTON */
+  .shutdown-btn-wrap { text-align: center; margin-top: 8px; margin-bottom: 24px; }
+  .btn-end-day {
+    background: transparent; border: 1px solid var(--border); border-radius: 40px;
+    padding: 10px 24px; color: var(--muted); font-family: 'DM Sans', sans-serif;
+    font-size: 12px; font-weight: 500; letter-spacing: 0.04em; cursor: pointer;
+    transition: all 0.2s; font-style: italic;
+  }
+  .btn-end-day:hover { border-color: var(--accent3); color: var(--accent3); }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 32px; left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--accent); color: var(--bg);
+    padding: 12px 24px; border-radius: 40px; font-weight: 800; font-size: 13px;
+    letter-spacing: 0.05em; transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    z-index: 100; white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.badge { background: var(--accent3); }
+
+  @keyframes flash { 0%,100%{opacity:0} 50%{opacity:1} }
+  .flash-overlay { position: fixed; inset: 0; opacity: 0; pointer-events: none; z-index: 50; }
+  .flash-overlay.flash { animation: flash 0.5s ease; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">Deep Work Timer</div>
+    <div class="level-badge">⚡ LVL <span id="levelNum">1</span></div>
+  </header>
+
+  <!-- XP BAR -->
+  <div class="xp-bar-wrap">
+    <div class="xp-info">
+      <div class="xp-label">Depth Points</div>
+      <div class="xp-bar-track"><div class="xp-bar-fill" id="xpFill" style="width:0%"></div></div>
+    </div>
+    <div class="xp-count" id="xpCount">0 / 100 XP</div>
+  </div>
+
+  <!-- STATS -->
+  <div class="streak-row">
+    <div class="stat-pill streak">
+      <div class="val" id="streakVal">0</div>
+      <div class="lbl">🔥 Day Streak</div>
+    </div>
+    <div class="stat-pill hours">
+      <div class="val" id="hoursVal">0.0</div>
+      <div class="lbl">⏱ Hrs Today</div>
+    </div>
+    <div class="stat-pill total">
+      <div class="val" id="totalVal">0</div>
+      <div class="lbl">🏆 All Time</div>
+    </div>
+  </div>
+
+  <!-- DEPTH HOURS (4-hour cap) -->
+  <div class="depth-card">
+    <div class="depth-header">
+      <div class="depth-title">Daily Depth Budget</div>
+      <div class="depth-count" id="depthCount">0 / 4 hrs</div>
+    </div>
+    <div class="depth-track">
+      <div class="depth-fill" id="depthFill" style="width:0%"></div>
+      <div class="depth-cap-line" id="depthCapLine" style="left:100%"></div>
+    </div>
+    <div class="depth-note">Newport: most people max out at 4 hours of genuine deep work per day.</div>
+  </div>
+
+  <!-- PRE-SESSION RITUAL -->
+  <div class="focus-prompt" id="focusPrompt">
+    <div class="focus-prompt-title">Before you begin</div>
+    <ul class="focus-checklist" id="focusChecklist">
+      <li id="chk1">Close all browser tabs</li>
+      <li id="chk2">Phone in another room</li>
+      <li id="chk3">Notifications off</li>
+    </ul>
+  </div>
+
+  <!-- TIMER -->
+  <div class="timer-card">
+    <div class="mode-tabs">
+      <button class="mode-tab active" onclick="switchMode('work')">FOCUS</button>
+      <button class="mode-tab" onclick="switchMode('short')">SHORT BREAK</button>
+      <button class="mode-tab" onclick="switchMode('long')">LONG BREAK</button>
+    </div>
+    <div class="timer-ring-wrap">
+      <svg class="timer-ring-svg" viewBox="0 0 190 190">
+        <circle class="ring-bg" cx="95" cy="95" r="83"/>
+        <circle class="ring-progress" id="ringProgress" cx="95" cy="95" r="83" stroke-dasharray="521" stroke-dashoffset="0"/>
+      </svg>
+      <div class="timer-center">
+        <div class="timer-display" id="timerDisplay">25:00</div>
+        <div class="timer-phase" id="timerPhase">Ready</div>
+      </div>
+    </div>
+    <div class="timer-controls">
+      <div class="btn-icon" onclick="resetTimer()">↺</div>
+      <button class="btn-main" id="mainBtn" onclick="toggleTimer()">START</button>
+      <div class="btn-icon" onclick="skipPhase()">⟶</div>
+    </div>
+  </div>
+
+  <!-- DAILY GOAL -->
+  <div class="goal-card">
+    <div class="goal-header">
+      <div class="goal-title">Today's Sessions</div>
+      <div class="goal-count" id="goalCount">0 / 4</div>
+    </div>
+    <div class="goal-dots" id="goalDots"></div>
+  </div>
+
+  <!-- CALENDAR CHAIN (Newport's X method) -->
+  <div class="calendar-section">
+    <div class="section-label">The Chain — <span style="color:var(--accent)">don't break it</span></div>
+    <div class="calendar-grid" id="calendarGrid"></div>
+  </div>
+
+  <!-- BADGES -->
+  <div class="badges-section">
+    <div class="section-label">Achievements</div>
+    <div class="badges-grid" id="badgesGrid"></div>
+  </div>
+
+  <!-- SHUTDOWN -->
+  <div class="shutdown-btn-wrap">
+    <button class="btn-end-day" onclick="openShutdown()">Shutdown Complete →</button>
+  </div>
+
+</div>
+
+<!-- DEPTH RATING MODAL -->
+<div class="modal-overlay" id="depthModal">
+  <div class="modal">
+    <div class="modal-title">Session complete 🎯</div>
+    <div class="modal-sub">Rate the depth of your work.<br>This adjusts your XP and depth score.</div>
+    <div class="depth-stars">
+      <button class="depth-star-btn" onclick="selectDepth(1)">
+        <span class="star-emoji">🌱</span>
+        <span class="star-label">SHALLOW</span>
+      </button>
+      <button class="depth-star-btn" onclick="selectDepth(2)">
+        <span class="star-emoji">🔥</span>
+        <span class="star-label">FOCUSED</span>
+      </button>
+      <button class="depth-star-btn" onclick="selectDepth(3)">
+        <span class="star-emoji">⚡</span>
+        <span class="star-label">DEEP</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- SHUTDOWN MODAL -->
+<div class="modal-overlay" id="shutdownModal">
+  <div class="shutdown-modal">
+    <div class="shutdown-icon">🔒</div>
+    <div class="shutdown-title">Day Complete</div>
+    <div class="shutdown-summary" id="shutdownSummary"></div>
+    <div class="shutdown-phrase">"Shutdown complete."</div>
+    <button class="btn-shutdown" onclick="confirmShutdown()">LOCK IN THE WORK</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="flash-overlay" id="flashOverlay"></div>
+
+<script>
+// ── CONSTANTS ─────────────────────────────────────────────
+const MODES = {
+  work:  { label: 'Deep Work',   duration: 25 * 60, color: '#c9b99a' },
+  short: { label: 'Short Break', duration:  5 * 60, color: '#8fa89a' },
+  long:  { label: 'Long Break',  duration: 15 * 60, color: '#a89a8f' },
+};
+
+const MAX_DEEP_HOURS = 4;
+const SESSION_HOURS = 25 / 60;
+const DAILY_GOAL = 4;
+
+const XP_DEPTH = { 1: 10, 2: 25, 3: 40 };
+const XP_PER_LEVEL = 100;
+
+const BADGES = [
+  { id: 'first',     emoji: '🌱', name: 'First Block',    req: s => s.total >= 1 },
+  { id: 'five',      emoji: '⚡', name: '5 Sessions',     req: s => s.total >= 5 },
+  { id: 'twenty',    emoji: '🔥', name: '20 Sessions',    req: s => s.total >= 20 },
+  { id: 'hundred',   emoji: '💯', name: '100 Sessions',   req: s => s.total >= 100 },
+  { id: 'streak3',   emoji: '📅', name: '3-Day Chain',    req: s => s.streak >= 3 },
+  { id: 'streak7',   emoji: '🗓️', name: 'Week Chain',     req: s => s.streak >= 7 },
+  { id: 'streak30',  emoji: '🏆', name: '30-Day Chain',   req: s => s.streak >= 30 },
+  { id: 'daily',     emoji: '🎯', name: 'Daily Goal',     req: s => s.todaySessions >= 4 },
+  { id: 'maxdepth',  emoji: '🧠', name: 'Max Depth',      req: s => s.todayHours >= MAX_DEEP_HOURS },
+  { id: 'deepwork',  emoji: '📖', name: 'Deep Worker',    req: s => s.totalDepthScore >= 50 },
+  { id: 'shutdown',  emoji: '🔒', name: 'Shutdown Ritual',req: s => s.shutdowns >= 5 },
+  { id: 'grind',     emoji: '😤', name: 'Over Budget',    req: s => s.todaySessions >= 10 },
+];
+
+// ── STATE ─────────────────────────────────────────────────
+let state = loadState();
+let mode = 'work';
+let timeLeft = MODES.work.duration;
+let running = false;
+let interval = null;
+let totalDuration = MODES.work.duration;
+let checklistStep = 0;
+let checklistInterval = null;
+
+// ── PERSISTENCE ───────────────────────────────────────────
+function loadState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('deepwork_v2') || '{}');
+    const today = new Date().toDateString();
+    if (saved.lastDate !== today) {
+      saved.todaySessions = 0;
+      saved.todayHours = 0;
+      if (saved.lastDate) {
+        const last = new Date(saved.lastDate);
+        const diff = Math.floor((new Date() - last) / 86400000);
+        if (diff > 1) saved.streak = 0;
+      }
+    }
+    return {
+      total: saved.total || 0,
+      todaySessions: saved.todaySessions || 0,
+      todayHours: saved.todayHours || 0,
+      streak: saved.streak || 0,
+      xp: saved.xp || 0,
+      level: saved.level || 1,
+      lastDate: saved.lastDate || null,
+      unlockedBadges: saved.unlockedBadges || [],
+      calendarData: saved.calendarData || {},
+      totalDepthScore: saved.totalDepthScore || 0,
+      shutdowns: saved.shutdowns || 0,
+    };
+  } catch {
+    return { total:0, todaySessions:0, todayHours:0, streak:0, xp:0, level:1, lastDate:null, unlockedBadges:[], calendarData:{}, totalDepthScore:0, shutdowns:0 };
+  }
+}
+
+function saveState() {
+  state.lastDate = new Date().toDateString();
+  localStorage.setItem('deepwork_v2', JSON.stringify(state));
+}
+
+// ── TIMER ─────────────────────────────────────────────────
+function switchMode(m) {
+  if (running) return;
+  mode = m;
+  timeLeft = MODES[m].duration;
+  totalDuration = MODES[m].duration;
+  document.querySelectorAll('.mode-tab').forEach((t,i) => {
+    t.classList.toggle('active', ['work','short','long'][i] === m);
+  });
+  document.getElementById('ringProgress').style.stroke = MODES[m].color;
+  updateTimerDisplay();
+  updateRing();
+
+  // Show ritual checklist when switching to work mode
+  const prompt = document.getElementById('focusPrompt');
+  if (m === 'work') {
+    prompt.classList.add('visible');
+    startChecklist();
+  } else {
+    prompt.classList.remove('visible');
+    clearInterval(checklistInterval);
+    checklistStep = 0;
+  }
+}
+
+function startChecklist() {
+  clearInterval(checklistInterval);
+  checklistStep = 0;
+  ['chk1','chk2','chk3'].forEach(id => document.getElementById(id).className = '');
+  checklistInterval = setInterval(() => {
+    if (checklistStep < 3) {
+      document.getElementById('chk' + (checklistStep + 1)).classList.add('checked');
+      checklistStep++;
+    } else {
+      clearInterval(checklistInterval);
+    }
+  }, 800);
+}
+
+function toggleTimer() {
+  if (running) {
+    clearInterval(interval);
+    running = false;
+    document.getElementById('mainBtn').textContent = 'RESUME';
+    document.getElementById('mainBtn').className = 'btn-main paused';
+    document.getElementById('timerPhase').textContent = 'Paused';
+  } else {
+    running = true;
+    document.getElementById('mainBtn').textContent = 'PAUSE';
+    document.getElementById('mainBtn').className = 'btn-main' + (mode !== 'work' ? ' break' : '');
+    document.getElementById('timerPhase').textContent = MODES[mode].label;
+    document.getElementById('focusPrompt').classList.remove('visible');
+    interval = setInterval(tick, 1000);
+    renderGoalDots();
+  }
+}
+
+function tick() {
+  timeLeft--;
+  updateTimerDisplay();
+  updateRing();
+  if (timeLeft <= 0) {
+    clearInterval(interval);
+    running = false;
+    onComplete();
+  }
+}
+
+function resetTimer() {
+  clearInterval(interval);
+  clearInterval(checklistInterval);
+  running = false;
+  timeLeft = MODES[mode].duration;
+  totalDuration = MODES[mode].duration;
+  document.getElementById('mainBtn').textContent = 'START';
+  document.getElementById('mainBtn').className = 'btn-main';
+  document.getElementById('timerPhase').textContent = 'Ready';
+  document.getElementById('focusPrompt').classList.remove('visible');
+  updateTimerDisplay();
+  updateRing();
+  renderGoalDots();
+}
+
+function skipPhase() {
+  clearInterval(interval);
+  running = false;
+  timeLeft = 0;
+  onComplete();
+}
+
+function onComplete() {
+  document.getElementById('timerPhase').textContent = 'Done!';
+  document.getElementById('mainBtn').textContent = 'START';
+  document.getElementById('mainBtn').className = 'btn-main';
+
+  const flash = document.getElementById('flashOverlay');
+  flash.style.background = MODES[mode].color;
+  flash.classList.add('flash');
+  setTimeout(() => flash.classList.remove('flash'), 500);
+
+  if (mode === 'work') {
+    // Show depth rating modal
+    document.getElementById('depthModal').classList.add('show');
+  } else {
+    showToast('Break over — back to deep work 💪');
+    setTimeout(() => switchMode('work'), 1500);
+  }
+}
+
+// ── DEPTH RATING ──────────────────────────────────────────
+function selectDepth(rating) {
+  document.getElementById('depthModal').classList.remove('show');
+
+  const xpGained = XP_DEPTH[rating];
+  state.total++;
+  state.todaySessions++;
+  state.todayHours = Math.min(state.todayHours + SESSION_HOURS, MAX_DEEP_HOURS + 2);
+  state.xp += xpGained;
+  state.totalDepthScore += rating;
+
+  // Mark calendar
+  const todayKey = new Date().toDateString();
+  if (!state.calendarData[todayKey]) state.calendarData[todayKey] = 0;
+  state.calendarData[todayKey] += rating;
+
+  // Level up
+  while (state.xp >= state.level * XP_PER_LEVEL) {
+    state.xp -= state.level * XP_PER_LEVEL;
+    state.level++;
+    setTimeout(() => showToast(`⚡ LEVEL UP! Now Level ${state.level}`), 500);
+  }
+
+  // Streak
+  if (state.lastDate !== todayKey) state.streak++;
+
+  saveState();
+  checkBadges();
+  renderUI();
+
+  const labels = { 1: 'Logged (+10 XP)', 2: 'Focused session (+25 XP) 🔥', 3: 'Deep work! (+40 XP) ⚡' };
+  showToast(labels[rating]);
+
+  setTimeout(() => switchMode('short'), 1200);
+}
+
+// ── SHUTDOWN ──────────────────────────────────────────────
+function openShutdown() {
+  const summary = document.getElementById('shutdownSummary');
+  const depthAvg = state.todaySessions > 0
+    ? (state.totalDepthScore / state.total).toFixed(1)
+    : '—';
+  summary.innerHTML = `
+    <div class="shutdown-row"><span class="key">Sessions today</span><span class="val">${state.todaySessions}</span></div>
+    <div class="shutdown-row"><span class="key">Hours logged</span><span class="val">${state.todayHours.toFixed(1)} hrs</span></div>
+    <div class="shutdown-row"><span class="key">Day streak</span><span class="val">${state.streak} days</span></div>
+    <div class="shutdown-row"><span class="key">Total sessions</span><span class="val">${state.total}</span></div>
+  `;
+  document.getElementById('shutdownModal').classList.add('show');
+}
+
+function confirmShutdown() {
+  document.getElementById('shutdownModal').classList.remove('show');
+  state.shutdowns++;
+  saveState();
+  checkBadges();
+  showToast('🔒 Shutdown complete. Rest well.');
+  renderUI();
+}
+
+// ── BADGES ────────────────────────────────────────────────
+function checkBadges() {
+  BADGES.forEach(badge => {
+    if (!state.unlockedBadges.includes(badge.id) && badge.req(state)) {
+      state.unlockedBadges.push(badge.id);
+      setTimeout(() => showToast(`🏅 Badge: ${badge.name}!`, true), 2200);
+    }
+  });
+  saveState();
+}
+
+// ── RENDER ────────────────────────────────────────────────
+function renderUI() {
+  document.getElementById('streakVal').textContent = state.streak;
+  document.getElementById('hoursVal').textContent = state.todayHours.toFixed(1);
+  document.getElementById('totalVal').textContent = state.total;
+  document.getElementById('levelNum').textContent = state.level;
+
+  // XP
+  const xpNeeded = state.level * XP_PER_LEVEL;
+  document.getElementById('xpFill').style.width = Math.min((state.xp / xpNeeded) * 100, 100) + '%';
+  document.getElementById('xpCount').textContent = `${state.xp} / ${xpNeeded} XP`;
+
+  // Depth budget bar
+  const depthPct = Math.min((state.todayHours / MAX_DEEP_HOURS) * 100, 100);
+  document.getElementById('depthFill').style.width = depthPct + '%';
+  document.getElementById('depthCount').textContent = `${state.todayHours.toFixed(1)} / ${MAX_DEEP_HOURS} hrs`;
+  // Cap line at 100% of the 4-hour mark
+  document.getElementById('depthCapLine').style.left = '100%';
+  if (state.todayHours >= MAX_DEEP_HOURS) {
+    document.getElementById('depthFill').style.background = 'linear-gradient(90deg, var(--accent3), var(--danger))';
+  }
+
+  renderGoalDots();
+  renderCalendar();
+  renderBadges();
+}
+
+function renderGoalDots() {
+  const dotsEl = document.getElementById('goalDots');
+  dotsEl.innerHTML = '';
+  for (let i = 0; i < DAILY_GOAL; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'goal-dot';
+    if (i < state.todaySessions) dot.classList.add('done');
+    else if (i === state.todaySessions && running && mode === 'work') dot.classList.add('active');
+    dotsEl.appendChild(dot);
+  }
+  document.getElementById('goalCount').textContent = `${Math.min(state.todaySessions, DAILY_GOAL)} / ${DAILY_GOAL}`;
+}
+
+function renderCalendar() {
+  const grid = document.getElementById('calendarGrid');
+  grid.innerHTML = '';
+  const today = new Date();
+  // Show last 28 days
+  for (let i = 27; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const key = d.toDateString();
+    const dayNum = d.getDate();
+    const isToday = i === 0;
+    const isFuture = false;
+    const hasWork = state.calendarData[key] && state.calendarData[key] > 0;
+
+    const el = document.createElement('div');
+    el.className = 'cal-day' + (hasWork ? ' has-work' : '') + (isToday ? ' today' : '');
+    el.innerHTML = `<span class="cal-x">${hasWork ? '✕' : ''}</span><span class="cal-num">${dayNum}</span>`;
+    if (hasWork) el.title = `${d.toLocaleDateString('en-US', {month:'short',day:'numeric'})}: depth score ${state.calendarData[key]}`;
+    grid.appendChild(el);
+  }
+}
+
+function renderBadges() {
+  const grid = document.getElementById('badgesGrid');
+  grid.innerHTML = '';
+  BADGES.forEach(badge => {
+    const unlocked = state.unlockedBadges.includes(badge.id);
+    const el = document.createElement('div');
+    el.className = 'badge-item ' + (unlocked ? 'unlocked' : 'locked');
+    el.innerHTML = `<span class="badge-emoji">${badge.emoji}</span><div class="badge-name">${badge.name}</div>`;
+    grid.appendChild(el);
+  });
+}
+
+// ── TIMER DISPLAY ─────────────────────────────────────────
+function updateTimerDisplay() {
+  const m = Math.floor(timeLeft / 60).toString().padStart(2,'0');
+  const s = (timeLeft % 60).toString().padStart(2,'0');
+  document.getElementById('timerDisplay').textContent = `${m}:${s}`;
+}
+
+function updateRing() {
+  const circumference = 521;
+  const offset = circumference * (1 - timeLeft / totalDuration);
+  document.getElementById('ringProgress').style.strokeDashoffset = offset;
+}
+
+// ── TOAST ─────────────────────────────────────────────────
+let toastTimeout;
+function showToast(msg, isBadge = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (isBadge ? ' badge' : '');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ── INIT ──────────────────────────────────────────────────
+updateTimerDisplay();
+updateRing();
+renderUI();
+</script>
+</body>
+</html>
